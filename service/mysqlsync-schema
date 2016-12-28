@@ -73,9 +73,38 @@ case "$1" in
         ;;
     check)
         echo -n "Checking services: "$NAME
-        echo "if status exit code == 3 then service is stopped exit 0"
-        echo "if status exit code !== 0 then error SNS / SLACK something wrong service must be started"
-        echo "if autostart=on then try to restart it"
+        status
+        ec=$?
+
+        if [ "3" == "$ec" ]
+        then
+            echo "Service is volontary stopped, avoid auto restart"
+            exit 0
+        fi
+
+        echo "Run test DB...."
+
+        if [ "0" == "$ec" ]
+        then
+            exit 0
+        fi
+
+        if [ $AUTO_RESTART == "on" ]
+        then
+            echo "try to restart it..."
+            restart
+            sleep 5
+
+            status
+            if [ "0" == "$?" ]
+            then
+                echo "Success restart !"
+                exit 0
+            fi
+            
+            echo "Restart fail ! should send SNS or SLACK notification"
+            exit 1
+        fi
         ;;
 
   *)
