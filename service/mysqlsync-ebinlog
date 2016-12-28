@@ -1,0 +1,47 @@
+#!/bin/bash
+# description: Service for control mysqlsync
+
+# Source function library.
+. /etc/init.d/functions
+
+NAME=mysqlsync
+MYSQLSYNC_BIN=/usr/local/bin/mysqlsync
+PIDFILE=/var/run/$NAME.pid
+DAEMON=/usr/local/bin/mysqlsync-daemon
+CONF=/etc/mysqlsync/mysqlsync.conf
+
+if [ ! -f $CONF ]
+then
+    echo "Configuration file missing in $CONF"
+fi
+
+source $CONF
+export PATH="${PATH:+$PATH:}/usr/sbin:/sbin"
+
+case "$1" in
+    start)
+        echo -n "Starting daemon: "$NAME
+        start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- $DAEMON_OPTS
+        echo "."
+        ;;
+    stop)
+        echo -n "Stopping daemon: "$NAME
+        start-stop-daemon --stop --quiet --oknodo --pidfile $PIDFILE
+        echo "."
+        ;;
+    restart)
+        echo -n "Restarting daemon: "$NAME
+        start-stop-daemon --stop --quiet --oknodo --retry 30 --pidfile $PIDFILE
+        start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- $DAEMON_OPTS
+        echo "."
+        ;;
+    check)
+        echo -n "Checking services: "$NAME
+        ;;
+
+  *)
+      echo "Usage: "$1" {start|stop|restart|check}"
+      exit 1
+esac
+
+exit 0
