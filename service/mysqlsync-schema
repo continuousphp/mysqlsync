@@ -1,0 +1,86 @@
+#!/bin/bash
+# description: Service for control mysqlsync schema
+
+NAME=mysqlsync
+MYSQLSYNC_BIN=/usr/local/bin/mysqlsync
+PIDFILE=/var/run/$NAME.pid
+DAEMON=/usr/local/bin/mysqlsync-daemon
+CONF=/etc/mysqlsync/schema.conf
+
+if [ ! -f $CONF ]
+then
+    echo "Configuration file missing in $CONF"
+    exit 1
+fi
+
+export PATH="${PATH:+$PATH:}/usr/sbin:/sbin"
+
+if [ ! "644" = "`stat -c '%a' $CONF`" ]
+then
+    echo "Config file $CONF must have permission to 644"
+    exit 1
+fi
+
+source $CONF
+
+DAEMON_OPTS="-r $RESPAWN -i -c \"DST_HOST=$DST_HOST DST_USER=$DST_USER DST_PASSWORD=$DST_PASSWORD SRC_HOST=$SRC_HOST SRC_USER=$SRC_USER SRC_PASSWORD=$SRC_PASSWORD\" schema"
+
+case "$1" in
+    start)
+        echo -n "Starting daemon: "$NAME
+        start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- $DAEMON_OPTS
+        rm /etc/mysqlsync/.schema.stop
+        echo "."
+        ;;
+    stop)
+        echo -n "Stopping daemon: "$NAME
+        touch /etc/mysqlsync/.schema.stop
+        start-stop-daemon --stop --quiet --oknodo --pidfile $PIDFILE
+        echo "."
+        ;;
+    status)
+        echo "Status daemon: "$NAME
+
+        if [ -f $PIDFILE ] && [ -d "/proc/`cat $PIDFILE`" ]
+        then
+            pid=`cat $PIDFILE`
+        fi
+
+        if [ -f /etc/mysqlsync/.schema.stop ] && [ $pid == "" ]
+        then
+            echo "Service is stopped"
+            exit 3
+        fi
+
+        if [ ! -f /etc/mysqlsync/.schema.stop ] && [ ! $pid == "" ]
+        then
+            echo "Abnormal termination or never started"
+            exit 4
+        fi
+
+        if [ ! -f /etc/mysqlsync/.schema.stop ] && [ $pid == "" ]
+
+        then
+            echo "Service is started with PID $pid"
+            exit 0
+        fi
+        ;;
+    restart)
+        echo -n "Restarting daemon: "$NAME
+        start-stop-daemon --stop --quiet --oknodo --retry 30 --pidfile $PIDFILE
+        start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- $DAEMON_OPTS
+        echo "."
+        ;;
+    check)
+        echo -n "Checking services: "$NAME
+        echo "if status exit code == 3 then service is stopped exit 0"
+        echo "if status exit code !== 0 then error SNS / SLACK something wrong service must be started"
+        echo "if autostart=on then try to restart it"
+        ;;
+
+  *)
+      echo "Usage: "$1" {start|stop|status|restart|check}"
+      exit 1
+esac
+
+exit 0
