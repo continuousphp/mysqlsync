@@ -1,11 +1,20 @@
 #!/bin/bash
 # description: Service for control mysqlsync schema
 
+GREEN="\\033[1;32m"
+NORMAL="\\033[0;39m"
+RED="\\033[1;31m"
+PINK="\\033[1;35m"
+BLUE="\\033[1;34m"
+WHITE="\\033[0;02m"
+YELLOW="\\033[1;33m"
+CYAN="\\033[1;36m"
+
 NAME=mysqlsync
-MYSQLSYNC_BIN=/usr/local/bin/mysqlsync
 PIDFILE=/var/run/$NAME.pid
-DAEMON=/usr/local/bin/mysqlsync-daemon
+DAEMON=/usr/local/bin/mysqlsync
 CONF=/etc/mysqlsync/schema.conf
+LOG=/var/log/mysqlsync/schema.log
 
 if [ ! -f $CONF ]
 then
@@ -23,13 +32,13 @@ fi
 
 source $CONF
 
-DAEMON_OPTS="-r $RESPAWN -i -c \"DST_HOST=$DST_HOST DST_USER=$DST_USER DST_PASSWORD=$DST_PASSWORD SRC_HOST=$SRC_HOST SRC_USER=$SRC_USER SRC_PASSWORD=$SRC_PASSWORD\" schema"
+CREDENTIALS="DST_HOST=$DST_HOST DST_USER=$DST_USER DST_PASSWORD=$DST_PASSWORD SRC_HOST=$SRC_HOST SRC_USER=$SRC_USER SRC_PASSWORD=$SRC_PASSWORD"
 
 case "$1" in
     start)
         echo -n "Starting daemon: "$NAME
-        start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- $DAEMON_OPTS
-        rm /etc/mysqlsync/.schema.stop
+	    start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- -r $RESPAWN -i -c "$CREDENTIALS" schema > $LOG 2>&1 & disown
+        rm -f /etc/mysqlsync/.schema.stop
         echo "."
         ;;
     stop)
@@ -46,29 +55,28 @@ case "$1" in
             pid=`cat $PIDFILE`
         fi
 
-        if [ -f /etc/mysqlsync/.schema.stop ] && [ $pid == "" ]
+        if [ -f /etc/mysqlsync/.schema.stop ] && [ "$pid" == "" ]
         then
-            echo "Service is stopped"
+            echo -e ${PINK}"Service is stopped"${NORMAL}
             exit 3
         fi
 
-        if [ ! -f /etc/mysqlsync/.schema.stop ] && [ ! $pid == "" ]
+        if [ ! -f /etc/mysqlsync/.schema.stop ] && [ "$pid" == "" ]
         then
-            echo "Abnormal termination or never started"
+            echo -e ${RED}"Abnormal termination or never started"${NORMAL}
             exit 4
         fi
 
-        if [ ! -f /etc/mysqlsync/.schema.stop ] && [ $pid == "" ]
-
+        if [ ! -f /etc/mysqlsync/.schema.stop ] && [ ! "$pid" == "" ]
         then
-            echo "Service is started with PID $pid"
+            echo -e ${GREEN}"Service is started with PID $pid"${NORMAL}
             exit 0
         fi
         ;;
     restart)
         echo -n "Restarting daemon: "$NAME
         start-stop-daemon --stop --quiet --oknodo --retry 30 --pidfile $PIDFILE
-        start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- $DAEMON_OPTS
+        start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- -r $RESPAWN -i -c "$CREDENTIALS" schema > $LOG 2>&1 & disown
         echo "."
         ;;
     check)
