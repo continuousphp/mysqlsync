@@ -1,0 +1,5 @@
+/var/log/mysqlsync/schema.log {
+    weekly
+    notifempty
+    missingok
+}
