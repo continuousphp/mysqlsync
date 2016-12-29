@@ -34,21 +34,9 @@ source $CONF
 
 CREDENTIALS="DST_HOST=$DST_HOST DST_USER=$DST_USER DST_PASSWORD=$DST_PASSWORD SRC_HOST=$SRC_HOST SRC_USER=$SRC_USER SRC_PASSWORD=$SRC_PASSWORD"
 
-case "$1" in
-    start)
-        echo -n "Starting daemon: "$NAME
-	    start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- -r $RESPAWN -i -c "$CREDENTIALS" schema > $LOG 2>&1 & disown
-        rm -f /etc/mysqlsync/.schema.stop
-        echo "."
-        ;;
-    stop)
-        echo -n "Stopping daemon: "$NAME
-        touch /etc/mysqlsync/.schema.stop
-        start-stop-daemon --stop --quiet --oknodo --pidfile $PIDFILE
-        echo "."
-        ;;
-    status)
-        echo "Status daemon: "$NAME
+status()
+{
+	echo -e "Status daemon: "$NAME
 
         if [ -f $PIDFILE ] && [ -d "/proc/`cat $PIDFILE`" ]
         then
@@ -58,39 +46,107 @@ case "$1" in
         if [ -f /etc/mysqlsync/.schema.stop ] && [ "$pid" == "" ]
         then
             echo -e ${PINK}"Service is stopped"${NORMAL}
-            exit 3
+            return 3
         fi
 
         if [ ! -f /etc/mysqlsync/.schema.stop ] && [ "$pid" == "" ]
         then
             echo -e ${RED}"Abnormal termination or never started"${NORMAL}
-            exit 4
+	    return 4
         fi
 
         if [ ! -f /etc/mysqlsync/.schema.stop ] && [ ! "$pid" == "" ]
         then
             echo -e ${GREEN}"Service is started with PID $pid"${NORMAL}
-            exit 0
+            return 0
         fi
+}
+
+start()
+{
+	echo -e "${BLUE}Start...${NORMAL}"
+	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- -r $RESPAWN -i -c "$CREDENTIALS" schema > $LOG 2>&1 & disown
+	rm -f /etc/mysqlsync/.schema.stop
+	sleep 5
+	status
+	return $?
+}
+
+notification()
+{
+	# SNS...
+	if [ -n ${ALERT_SNS_ARN} ]
+	then
+		aws --region ${ALERT_SNS_REGION} sns publish \
+		  --topic-arn "${ALERT_SNS_ARN}" \
+		  --subject "WARNING: MysqlSync Schema Service" \
+		  --message "$1"
+	fi
+
+	# Slack...
+	if [ ! -n ${ALERT_SLACK_URL} ]
+	then
+		echo "missing variable ALERT_SLACK_URL"
+		return
+	fi
+
+	if [ ! -n ${ALERT_SLACK_USERNAME} ]
+	then
+	    echo "missing variable ALERT_SLACK_USERNAME"
+		return
+	fi
+
+	if [ ! -n $ALERT_SLACK_CHANNEL ]
+	then
+		echo "missing variable ALERT_SLACK_CAHNNEL"
+		return
+	fi
+
+	text=$1
+
+	if [ "$text" == "" ]
+	then
+		echo "First argument must be text of the notification"
+		exit 1
+	fi
+    
+    payload='payload={"channel": "'${ALERT_SLACK_CHANNEL}'", "username": "'${ALERT_SLACK_USERNAME}'", "text": "'$text'", "icon_emoji": ":red_circle:"}'
+    curl -X POST --data-urlencode "$payload" $ALERT_SLACK_URL &>/dev/null &
+}
+
+case "$1" in
+    start)
+        echo "Starting daemon: "$NAME
+        start
+        exit $?
+        ;;
+    stop)
+        echo "Stopping daemon: "$NAME
+        touch /etc/mysqlsync/.schema.stop
+        start-stop-daemon --stop --quiet --oknodo --pidfile $PIDFILE
+        rm $PIDFILE
+        ;;
+    status)
+        status
+        exit $?
         ;;
     restart)
-        echo -n "Restarting daemon: "$NAME
+        echo "Restarting daemon: "$NAME
+        echo -e "${PINK}Stop...${NORMAL}"
         start-stop-daemon --stop --quiet --oknodo --retry 30 --pidfile $PIDFILE
-        start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- -r $RESPAWN -i -c "$CREDENTIALS" schema > $LOG 2>&1 & disown
-        echo "."
+	start
+        exit $?
         ;;
     check)
-        echo -n "Checking services: "$NAME
+        echo "Checking services: "$NAME
         status
         ec=$?
 
         if [ "3" == "$ec" ]
         then
-            echo "Service is volontary stopped, avoid auto restart"
+            echo -e "${YELLOW}Service is volontary stopped, avoid auto restart${NORMAL}"
             exit 0
         fi
-
-        echo "Run test DB...."
 
         if [ "0" == "$ec" ]
         then
@@ -100,17 +156,17 @@ case "$1" in
         if [ $AUTO_RESTART == "on" ]
         then
             echo "try to restart it..."
-            restart
-            sleep 5
+            start
 
-            status
             if [ "0" == "$?" ]
             then
-                echo "Success restart !"
+                echo -e "${GREEN}Success restart !${NORMAL}"
+                notification "Service auto restart by check method.\nYou should look at server log if it's too often."
                 exit 0
             fi
             
-            echo "Restart fail ! should send SNS or SLACK notification"
+            echo -e "${RED}Restart fail !${NORMAL}"
+            notification "Fail during restarting service $0."
             exit 1
         fi
         ;;

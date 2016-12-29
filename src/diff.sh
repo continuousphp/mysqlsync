@@ -39,12 +39,15 @@ diff_schema()
 		  $dbname $dbname \
 		| sed -e 's/#.*//g' \
 		>> $sqlfile
+        
+        ec=$?
+        
+        if [ ! "0" == "$ec" ]
+        then
+            sns "mysqldiff have not ended sucessfully for database \`$dbname\`, exit code $ec"
+            slack "mysqldiff have not ended sucessfully for database \`$dbname\`, exit code $ec" ":bangbang:"
+        fi
 
-		if [ ! "0" == $? ]
-		  then
-			slack "mysqldiff have not ended sucessfully for database \`$dbname\`, exit code $?" ":bangbang:"
-		fi
-		
 		if [ ! -f $md5file ]
 		    then
 			touch $md5file
