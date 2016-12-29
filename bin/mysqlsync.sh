@@ -12,25 +12,20 @@ pushd `dirname $0`/../ > /dev/null
 MYSQLSYNC_PATH=`pwd -P`
 popd > /dev/null
 
-_term() {
-    echo -e "${PINK}Caught SIGTERM signal!${NORMAL}"
-    _SIGTERM="defined"
+_term()
+{
+    unset sleep
+    trap 'echo `date +%c`: SIGTERM signal received, TERMinated now; kill $sleep; exit 0' TERM
+    sleep $1 & sleep=$!; wait
 }
-
-trap _term SIGTERM
 
 _foreground()
 {
-    if [ -n "$_SIGTERM" ]
-    then
-        exit 3
-    fi
-
     if [ -n "$iflag" ]
     then
-        sleep $respawn
+	_term $respawn
     else
-        exit 0
+	exit 0
     fi
 }
 
@@ -73,9 +68,8 @@ bail ()
 {
   echo -e "${RED}Error code $1${NORMAL}"
   usage
-  exit 
+  exit 1
 }
-
 
 credential_src_check()
 {
@@ -125,10 +119,10 @@ while getopts ":hb:c:ir:" opt; do
 	  b) mbl="$OPTARG" ;;
 	  d) mysqldiffbin="$OPTARG" ;;
 	  c) export $OPTARG
-          credential_src_check
+             credential_src_check
 	     ;;
-      i) iflag="defined" ;;
-      r) let respawn=60*$OPTARG ;;
+      	  i) iflag="defined" ; echo "$$" > /var/run/mysqlsync.pid ;;
+      	  r) let respawn=60*$OPTARG ;;
 	  \?) echo -e "${RED}Invalid option: -$OPTARG${NORMAL}" >&2 ; bail 1 ;;
 	  :)  echo "Option -$OPTARG requires an argument." >&2 ; bail 2 
 	esac
@@ -162,23 +156,18 @@ if [ "schema" == "$1" ]
 		bail 2
 	fi
 
-    credential_src_check
+	credential_src_check
 	credential_dst_check
 
-    while true
+	while true
     do
-        echo -e "${BLUE}Synchronise schema from $SRC_HOST to $DST_HOST...${NORMAL}"
-	    diff_schema
+		echo -e "${BLUE}Synchronise schema from $SRC_HOST to $DST_HOST...${NORMAL}"
+	   	diff_schema
 	    diff_raw_sql "primary"
 	    diff_raw_sql "index"
 	    diff_apply_change
 
-        _foreground
-        if [ "3" == "$?" ]
-        then
-            echo "${PINK}I've been terminated.${NORMAL}"
-            exit 0
-        fi
+		_foreground
     done
 fi
 
@@ -199,15 +188,7 @@ if [ "ebinlog" == "$1" ]
     while true
     do
         echo "Export binlog..."
-
-        _foreground
-        if [ "3" == "$?" ]
-        then
-            echo "${PINK}I've been terminated.${NORMAL}"
-            exit 0
-        fi
+	_foreground
     done
 fi
-
-
 

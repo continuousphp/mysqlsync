@@ -18,9 +18,11 @@ install:
 		/bin/cp -r ${PATH}/etc /etc/mysqlsync; \
 	fi
 	@echo '#!/bin/bash' > /usr/local/bin/mysqlsync
-	@echo 'bash ${PATH}/bin/mysqlsync.sh $$@' >> /usr/local/bin/mysqlsync
+	@echo 'bash ${PATH}/bin/mysqlsync.sh "$$@" &' >> /usr/local/bin/mysqlsync
 	/bin/chmod +x /usr/local/bin/mysqlsync
 	/bin/cp ${PATH}/service/mysqlsync-schema /etc/init.d/
+	mkdir /var/log/mysqlsync
+	echo "TODO Must install rotated log"
 	echo -e ${GREEN}"Install done."${NORMAL}
 uninstall:
 	/bin/rm -f /usr/local/bin/mysqlsync
