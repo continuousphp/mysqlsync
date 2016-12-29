@@ -1,9 +1,20 @@
 #!/bin/bash
 
+notification()
+{
+	sns "$@"
+	slack "$@"
+}
+
 sns()
 {
-	echo "NOT YET IMPLEMENTED"
-	exit 2
+	if [ -n ${ALERT_SNS_ARN} ]
+	then
+		aws --region ${ALERT_SNS_REGION} sns publish \
+		--topic-arn "${ALERT_SNS_ARN}" \
+		--subject "WARNING: MysqlSync Schema Service" \
+		--message "$1"
+	fi
 }
 
 slack()
@@ -11,19 +22,19 @@ slack()
 	if [ -z ${ALERT_SLACK_URL+x} ]
 	  then
 		echo "missing variable ALERT_SLACK_URL"
-		exit 1
+		return
 	fi
 
 	if [ -z ${ALERT_SLACK_USERNAME+x} ]
 	  then
 		echo "missing variable ALERT_SLACK_USERNAME"
-		exit 1
+		return
 	fi
 
 	if [ -z ${ALERT_SLACK_CHANNEL+x} ]
 	  then
 		echo "missing variable ALERT_SLACK_CAHNNEL"
-		exit 1
+		return
 	fi
 
 	text=$1
