@@ -59,7 +59,7 @@ function usage {
   default\t Update DST to have same default columns as SRC
   ebinlog\t Export binlog
   ibinlog\t Import binlog
-
+  dumpstruct\t Dump the SQL Structure of SRC database
 "
 }
 
@@ -67,7 +67,6 @@ function usage {
 bail ()
 {
   echo -e "${RED}Error code $1${NORMAL}"
-  usage
   exit 1
 }
 
@@ -190,5 +189,14 @@ if [ "ebinlog" == "$1" ]
         echo "Export binlog..."
 	_foreground
     done
+fi
+
+if [ "dumpstruct" == "$1" ]
+  then
+    credential_src_check
+    echo -e "${BLUE}Dump Mysql Structure in plain SQL from $SRC_HOST...${NORMAL}"
+
+    dumpstruct
+    exit 0
 fi
 
