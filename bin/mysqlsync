@@ -1,0 +1,14 @@
+#!/bin/bash
+
+while getopts ":hb:c:ir:" opt; do
+  case $opt in
+    i) iFlag="defined" ;;
+  esac
+done
+
+if [ -z ${iFlag+x} ]
+then
+	bash :path:/bin/mysqlsync.sh "$@" 
+else
+	bash :path:/bin/mysqlsync.sh "$@" &
+fi
