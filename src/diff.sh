@@ -22,8 +22,7 @@ diff_ls_databases()
 
 diff_schema()
 {
-	#for dbname in $(diff_ls_databases)
-	for dbname in cc
+	for dbname in $(diff_ls_databases)
 	do
 		echo -e "diff of ${GREEN}$dbname${NORMAL} started at `date +%c`"
 
@@ -40,12 +39,15 @@ diff_schema()
 		  $dbname $dbname \
 		| sed -e 's/#.*//g' \
 		>> $sqlfile
+        
+        ec=$?
+        
+        if [ ! "0" == "$ec" ]
+        then
+            sns "mysqldiff have not ended sucessfully for database \`$dbname\`, exit code $ec"
+            slack "mysqldiff have not ended sucessfully for database \`$dbname\`, exit code $ec" ":bangbang:"
+        fi
 
-		if [ ! "0" == $? ]
-		  then
-			slack "mysqldiff have not ended sucessfully for database \`$dbname\`, exit code $?" ":bangbang:"
-		fi
-		
 		if [ ! -f $md5file ]
 		    then
 			touch $md5file
@@ -75,7 +77,6 @@ diff_raw_sql()
 	fi
 	
 	for dbname in $(diff_ls_databases)
-	#for dbname in cc
 	do
 		echo -e "RAW SQL $target diff of ${GREEN}$dbname${NORMAL} started at `date +%c`"
 		echo "use $dbname;" > $DIFF_PATH/$dbname.$target.sql
@@ -114,7 +115,7 @@ diff_apply_change()
 	if [ ! "$(ls -A $DIFF_PATH)" ]
 	  then
 		echo -e "${BLUE}Nothing to apply.${NORMAL}"
-		exit 0
+		return
 	fi
 
 	for file in `ls $DIFF_PATH/*.sql`

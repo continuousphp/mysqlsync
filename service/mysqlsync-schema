@@ -1,0 +1,179 @@
+#!/bin/bash
+# description: Service for control mysqlsync schema
+
+GREEN="\\033[1;32m"
+NORMAL="\\033[0;39m"
+RED="\\033[1;31m"
+PINK="\\033[1;35m"
+BLUE="\\033[1;34m"
+WHITE="\\033[0;02m"
+YELLOW="\\033[1;33m"
+CYAN="\\033[1;36m"
+
+NAME=mysqlsync
+PIDFILE=/var/run/$NAME.pid
+DAEMON=/usr/local/bin/mysqlsync
+CONF=/etc/mysqlsync/schema.conf
+LOG=/var/log/mysqlsync/schema.log
+
+if [ ! -f $CONF ]
+then
+    echo "Configuration file missing in $CONF"
+    exit 1
+fi
+
+export PATH="${PATH:+$PATH:}/usr/sbin:/sbin"
+
+if [ ! "644" = "`stat -c '%a' $CONF`" ]
+then
+    echo "Config file $CONF must have permission to 644"
+    exit 1
+fi
+
+source $CONF
+
+CREDENTIALS="DST_HOST=$DST_HOST DST_USER=$DST_USER DST_PASSWORD=$DST_PASSWORD SRC_HOST=$SRC_HOST SRC_USER=$SRC_USER SRC_PASSWORD=$SRC_PASSWORD"
+
+status()
+{
+	echo -e "Status daemon: "$NAME
+
+        if [ -f $PIDFILE ] && [ -d "/proc/`cat $PIDFILE`" ]
+        then
+            pid=`cat $PIDFILE`
+        fi
+
+        if [ -f /etc/mysqlsync/.schema.stop ] && [ "$pid" == "" ]
+        then
+            echo -e ${PINK}"Service is stopped"${NORMAL}
+            return 3
+        fi
+
+        if [ ! -f /etc/mysqlsync/.schema.stop ] && [ "$pid" == "" ]
+        then
+            echo -e ${RED}"Abnormal termination or never started"${NORMAL}
+	    return 4
+        fi
+
+        if [ ! -f /etc/mysqlsync/.schema.stop ] && [ ! "$pid" == "" ]
+        then
+            echo -e ${GREEN}"Service is started with PID $pid"${NORMAL}
+            return 0
+        fi
+}
+
+start()
+{
+	echo -e "${BLUE}Start...${NORMAL}"
+	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- -r $RESPAWN -i -c "$CREDENTIALS" schema > $LOG 2>&1 & disown
+	rm -f /etc/mysqlsync/.schema.stop
+	sleep 5
+	status
+	return $?
+}
+
+notification()
+{
+	# SNS...
+	if [ -n ${ALERT_SNS_ARN} ]
+	then
+		aws --region ${ALERT_SNS_REGION} sns publish \
+		  --topic-arn "${ALERT_SNS_ARN}" \
+		  --subject "WARNING: MysqlSync Schema Service" \
+		  --message "$1"
+	fi
+
+	# Slack...
+	if [ ! -n ${ALERT_SLACK_URL} ]
+	then
+		echo "missing variable ALERT_SLACK_URL"
+		return
+	fi
+
+	if [ ! -n ${ALERT_SLACK_USERNAME} ]
+	then
+	    echo "missing variable ALERT_SLACK_USERNAME"
+		return
+	fi
+
+	if [ ! -n $ALERT_SLACK_CHANNEL ]
+	then
+		echo "missing variable ALERT_SLACK_CAHNNEL"
+		return
+	fi
+
+	text=$1
+
+	if [ "$text" == "" ]
+	then
+		echo "First argument must be text of the notification"
+		exit 1
+	fi
+    
+    payload='payload={"channel": "'${ALERT_SLACK_CHANNEL}'", "username": "'${ALERT_SLACK_USERNAME}'", "text": "'$text'", "icon_emoji": ":red_circle:"}'
+    curl -X POST --data-urlencode "$payload" $ALERT_SLACK_URL &>/dev/null &
+}
+
+case "$1" in
+    start)
+        echo "Starting daemon: "$NAME
+        start
+        exit $?
+        ;;
+    stop)
+        echo "Stopping daemon: "$NAME
+        touch /etc/mysqlsync/.schema.stop
+        start-stop-daemon --stop --quiet --oknodo --pidfile $PIDFILE
+        rm $PIDFILE
+        ;;
+    status)
+        status
+        exit $?
+        ;;
+    restart)
+        echo "Restarting daemon: "$NAME
+        echo -e "${PINK}Stop...${NORMAL}"
+        start-stop-daemon --stop --quiet --oknodo --retry 30 --pidfile $PIDFILE
+	start
+        exit $?
+        ;;
+    check)
+        echo "Checking services: "$NAME
+        status
+        ec=$?
+
+        if [ "3" == "$ec" ]
+        then
+            echo -e "${YELLOW}Service is volontary stopped, avoid auto restart${NORMAL}"
+            exit 0
+        fi
+
+        if [ "0" == "$ec" ]
+        then
+            exit 0
+        fi
+
+        if [ $AUTO_RESTART == "on" ]
+        then
+            echo "try to restart it..."
+            start
+
+            if [ "0" == "$?" ]
+            then
+                echo -e "${GREEN}Success restart !${NORMAL}"
+                notification "Service auto restart by check method.\nYou should look at server log if it's too often."
+                exit 0
+            fi
+            
+            echo -e "${RED}Restart fail !${NORMAL}"
+            notification "Fail during restarting service $0."
+            exit 1
+        fi
+        ;;
+
+  *)
+      echo "Usage: "$1" {start|stop|status|restart|check}"
+      exit 1
+esac
+
+exit 0
