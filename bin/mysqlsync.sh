@@ -38,9 +38,9 @@ WHITE="\\033[0;02m"
 YELLOW="\\033[1;33m"
 CYAN="\\033[1;36m"
 
-source $MYSQLSYNC_PATH/src/clean-sql.sh
 source $MYSQLSYNC_PATH/src/diff.sh
 source $MYSQLSYNC_PATH/src/alert.sh
+source $MYSQLSYNC_PATH/src/dump.sh
 
 # function for help output
 function usage {
