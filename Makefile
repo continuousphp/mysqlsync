@@ -17,13 +17,15 @@ install:
 	else \
 		/bin/cp -r ${PATH}/etc /etc/mysqlsync; \
 	fi
-	@echo '#!/bin/bash' > /usr/local/bin/mysqlsync
-	@echo 'bash ${PATH}/bin/mysqlsync.sh "$$@" &' >> /usr/local/bin/mysqlsync
-	/bin/chmod +x /usr/local/bin/mysqlsync
+	/bin/cat bin/mysqlsync | /bin/sed 's#:path:#${PATH}#g' > /usr/local/bin/mysqlsync
+	chmod +x /usr/local/bin/mysqlsync
 	/bin/cp ${PATH}/service/mysqlsync-schema /etc/init.d/
-	/bin/mkdir /var/log/mysqlsync
+	@if [ ! -d /var/log/mysqlsync ] ; then \
+		/bin/mkdir /var/log/mysqlsync; \
+	fi
 	/bin/cp etc/rotatedlog /etc/logrotate.d/mysqlsync
 	/bin/echo -e ${GREEN}"Install done."${NORMAL}
+
 uninstall:
 	/bin/rm -f /usr/local/bin/mysqlsync
 	/bin/rm -f /etc/init.d/mysqlsync-schema
