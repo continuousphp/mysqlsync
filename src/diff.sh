@@ -16,6 +16,7 @@ diff_ls_databases()
 	  | sed 's/performance_schema//g' \
 	  | sed 's/awsdms_control//g' \
 	  | sed 's/mysql//g' \
+	  | sed 's/innodb//g' \
 	  | tr "\\n" " " \
 	> /dev/stdout
 }
